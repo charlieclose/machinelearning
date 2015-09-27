@@ -1,0 +1,113 @@
+---
+title: "Analysis of Fitness Accelerometer Data"
+author: "Charlie Close"
+date: "September 27, 2015"
+output: html_document
+---
+
+##Executive Summary
+This analysis looks at data collected from accelerometers attached in various places on the bodies of young men while they performed a barbell lift exercise. Based on this data, we attempted to answer the following questions.  
+* Can the accelerometer data be used to predict whether the wearer is performing exercise correctly or incorrectly?  
+* What predictive model produces the best predictions?  
+* What is the expected accuracy of the predictions?  
+
+Based on the analysis described below, we conclude that we can predict the correctness of the exercises. Several models were used to generate predictions: CART, bagged ada boosting, stochastic gradient boosting, and random forest models. Of these, the random forest model produced the best predictions, with an accuracy rate on the training data of 99.23%.
+
+##Data preparation.
+Two sets of data were provided: training data, consisting of 19K observations, and testing data, consisting of 20 observations to be used to test the final model.  
+
+The columns of the training set consisted of four major categories:  
+
+* Bookkeeping columns such as name of the person performing the exercise and various timestamps.
+* Detailed data values of each accelerometer, such as the pitch, roll, and yaw.
+* Summarized data values such as kurtosis, max, min, average, variance, and standard deviation. The summarized values were derived from the detailed values and appeared in summary observations. In each observation, either the detailed data columns were populated or the summary data columns were populated, so that rows were, in effect, divided into two classes.
+* The column to be predicted: classe. This column contained the value A, B, C, D, or E, which described the way in which the barbell lift was performed. The value A represented a correct lift and B, C, D, and E represented different kinds of incorrectly-performed lifts.
+
+Only the detailed data values and the result column were needed for building a model. Therefore the summary data rows, the columns used only in the summary rows, and the bookkeeping columns were removed.
+
+The resulting training data set was broken into two subsets: a 75% training subset and a 25% testing subset (not to be confused with the original 20-row testing set). The training subset was used to train candidate models and the testing subset was used to validate them.
+
+##Results of Model Selection
+
+Several models were applied to the training subset in order to find the one that best fit the testing subset.  *A random forest model produced the best result with an accuracy rate of 99.23%, and a 95% confidence interval of (0.9433, 0.9558). Put another way, the predicted out of sample error rate was 0.77%.*
+
+See the confusion matrix in the Appendix for more detail on the random forest model.  
+
+Similarly, the CART model produced an accuracy rate of 53.87%, the bagged ada boosting model produced 36.28%, and the stochastic gradient boosting model produced 94.98%. The random forest model clearly performed best on the training data.
+
+Resampling was tried using both the default bootstrap method and a 3-fold method. The two methods produced very similar results so the default was kept.
+
+
+##Conclusion
+The random forest model created above was applied to the original testing set of 20 obvervations, and all 20 were predicted accurately, a result that is consistent with the expected accuracy, and which further suggests that it is possible to predict using accelerometers whether a barbell exercise is being performed correctly.
+
+##Appendix
+Output of the confusion matrix when using the random forest model. The model was created using a training subset of the training data, and the output is for the testing subset of the training data.  
+
+Note: the confusion matrices for the other candidate models are not included because it would have required a prohibitively huge amount of processing time to produce the output for this report. However, the accuracies of the models are given above and were produced using the same code, with only the models changed.
+
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE, message=FALSE}
+    library(caret)
+    library(rpart)
+    library(ggplot2)
+    library(dplyr)    
+    
+    #Load training data set.
+    train <- read.csv("./pml-training.csv", na.strings = c("NA", "#DIV/0!"))
+    
+    set.seed(1234)
+    
+    #Remove summary data rows. (new_window != "no")
+    train <- train%>%filter(new_window == "no")
+    
+    #Define columns to remove. 
+    
+    #Bookkeeping columns (1-7).
+    filterOut <- c(1:7)
+    
+    #Columns used only in summary data rows.
+    colNames <- names(train)
+    filterOut <- c(filterOut, grep("^kurtosis.*", colNames))
+    filterOut <- c(filterOut, grep("^skewness.*", colNames))    
+    filterOut <- c(filterOut, grep("^max.*", colNames))    
+    filterOut <- c(filterOut, grep("^min.*", colNames))    
+    filterOut <- c(filterOut, grep("^amplitude.*", colNames))    
+    filterOut <- c(filterOut, grep("^var.*", colNames))    
+    filterOut <- c(filterOut, grep("^avg.*", colNames))    
+    filterOut <- c(filterOut, grep("^stddev.*", colNames))    
+    
+    #Remove the columns.
+    train <- train[,-filterOut]
+    
+    #Identify columns that are highly correlated with other columns.
+    correlationMatrix <- cor(train [, -53]) #Column 53 = classe
+    highlyCorrelated <- findCorrelation(correlationMatrix, cutoff=0.75, verbose=FALSE)
+
+    #Remove the highly correlated columns.
+    train <- train[, -highlyCorrelated]
+    
+    #Split the training set into train_train and train_test subsets.
+    inTrain <- createDataPartition(train$classe, p=0.75, list=FALSE)
+    
+    train_train <- train[inTrain,]
+    train_test <- train[-inTrain,]
+    
+    #Build the model from train_train and test it against train_test.    
+    modelFit <- train(classe ~ ., method="rf", data=train_train)
+    predictions <- predict(modelFit, train_test)
+    print(confusionMatrix(predictions, train_test$classe))
+
+```
+
+
+##References
+This analysis is based on the work of Cordador, et. al. Thanks to them for their contribution to education.
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. [Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements](http://groupware.les.inf.puc-rio.br/work.jsf?p1=10335). Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. 
+
+
+
+
+
+
